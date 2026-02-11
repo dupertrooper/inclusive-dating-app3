@@ -310,7 +310,7 @@ function renderEmailVerification(email) {
         <p style="margin:8px 0 0 0;color:#999;font-size:0.9em;">Look for an email from Heart Dating App and enter the 6-digit code below</p>
       </div>
       <input id="verificationCode" type="text" placeholder="Enter 6-digit code" maxlength="6" style="text-align:center;letter-spacing:8px;font-size:1.5em;">
-      <button class="btn-primary" style="width:100%;" onclick="verifyEmail('${email}')">
+      <button class="btn-primary" style="width:100%;" onclick="verifyEmail()">>
         <i class="fas fa-check"></i> Verify
       </button>
       <button class="btn-secondary" style="width:100%;margin-top:10px;" onclick="renderHome()">← Back Home</button>
@@ -318,7 +318,7 @@ function renderEmailVerification(email) {
   `;
 }
 
-function verifyEmail(email) {
+function verifyEmail() {
     const code = document.getElementById('verificationCode').value.trim();
     
     if (!code || code.length !== 6) {
@@ -326,7 +326,6 @@ function verifyEmail(email) {
         return;
     }
     
-    // Call backend API to verify
     const jwt = localStorage.getItem('jwt');
     fetch(`${BACKEND_URL}/api/auth/verify-email`, {
         method: 'POST',

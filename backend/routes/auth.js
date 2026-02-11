@@ -101,7 +101,9 @@ router.post('/register', async(req, res) => {
             message: 'User registered. Verification code sent to email.',
             token,
             userId: user._id,
-            email: user.email
+            email: user.email,
+            isVerified: user.isVerified,
+            profileComplete: false
         });
     } catch (error) {
         console.error('Register error:', error);
@@ -148,6 +150,8 @@ router.post('/login', async(req, res) => {
             message: 'Logged in successfully',
             token,
             userId: user._id,
+            isVerified: user.isVerified,
+            profileComplete: user.fullName && user.age && user.gender && user.orientation && user.location,
             email: user.email,
             isVerified: user.isVerified
         });
@@ -157,14 +161,18 @@ router.post('/login', async(req, res) => {
     }
 });
 
+// Middleware to protect verify-email
+const { protect } = require('../middleware/auth');
+
 // @route POST /api/auth/verify-email
 // @desc Verify email with code
-router.post('/verify-email', async(req, res) => {
+router.post('/verify-email', protect, async(req, res) => {
     try {
-        const { email, code } = req.body;
+        const { code } = req.body;
+        const email = req.email; // Get from JWT
 
-        if (!email || !code) {
-            return res.status(400).json({ error: 'Email and code required' });
+        if (!code) {
+            return res.status(400).json({ error: 'Verification code required' });
         }
 
         // Find verification code
@@ -178,10 +186,6 @@ router.post('/verify-email', async(req, res) => {
             return res.status(400).json({ error: 'Invalid or expired code' });
         }
 
-        if (verCode.attempts >= verCode.maxAttempts) {
-            return res.status(400).json({ error: 'Too many attempts. Request new code.' });
-        }
-
         // Update user
         const user = await User.findOneAndUpdate({ email: email.toLowerCase() }, { isVerified: true }, { new: true });
 
@@ -192,6 +196,7 @@ router.post('/verify-email', async(req, res) => {
         res.json({
             success: true,
             message: 'Email verified successfully',
+            isVerified: true,
             user: {
                 id: user._id,
                 email: user.email,
@@ -206,13 +211,9 @@ router.post('/verify-email', async(req, res) => {
 
 // @route POST /api/auth/request-code
 // @desc Request new verification code
-router.post('/request-code', async(req, res) => {
+router.post('/request-code', protect, async(req, res) => {
     try {
-        const { email } = req.body;
-
-        if (!email) {
-            return res.status(400).json({ error: 'Email required' });
-        }
+        const email = req.email; // Get from JWT
 
         // Find user
         const user = await User.findOne({ email: email.toLowerCase() });
