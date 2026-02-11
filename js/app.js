@@ -5,6 +5,7 @@ const BACKEND_URL = 'https://inclusive-dating-app3.onrender.com';
 let state = {
     user: null,
     admin: null,
+    isSigningUp: false,
     profiles: JSON.parse(localStorage.getItem('profiles') || '[]'),
     likes: JSON.parse(localStorage.getItem('likes') || '{}'),
     matches: JSON.parse(localStorage.getItem('matches') || '{}'),
@@ -272,29 +273,44 @@ function signup() {
         alert('Please fill all fields');
         return;
     }
-    
-    // Call backend API
-    fetch(`${BACKEND_URL}/api/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password: pass, name })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.error) {
-            alert(data.error);
-            return;
-        }
-        // Store JWT and email for session
-        localStorage.setItem('jwt', data.token);
-        localStorage.setItem('userEmail', email);
-        state.user = { email };
-        renderEmailVerification(email);
-    })
-    .catch(err => {
-        console.error('Signup error:', err);
-        alert('Error creating account. Please try again.');
-    });
+  // Prevent double-submits
+  if (state.isSigningUp) return;
+  state.isSigningUp = true;
+
+  const btn = document.querySelector('.btn-primary[onclick="signup()"]');
+  const originalBtnText = btn ? btn.innerHTML : null;
+  if (btn) btn.innerHTML = 'Creating account...';
+
+  // Call backend API
+  fetch(`${BACKEND_URL}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: pass, name })
+  })
+  .then(async res => {
+    const data = await res.json().catch(() => ({ error: 'Invalid server response' }));
+    if (!res.ok) {
+      throw new Error(data.error || 'Server error');
+    }
+    return data;
+  })
+  .then(data => {
+    // Store JWT and email for session
+    if (data.token) {
+      localStorage.setItem('jwt', data.token);
+    }
+    localStorage.setItem('userEmail', email.toLowerCase());
+    state.user = { email: email.toLowerCase() };
+    state.isSigningUp = false;
+    if (btn) btn.innerHTML = originalBtnText;
+    renderEmailVerification(email.toLowerCase());
+  })
+  .catch(err => {
+    console.error('Signup error:', err);
+    state.isSigningUp = false;
+    if (btn) btn.innerHTML = originalBtnText;
+    alert(err.message || 'Error creating account. Please try again.');
+  });
 }
 
 function renderEmailVerification(email) {
