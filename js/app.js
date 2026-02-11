@@ -45,16 +45,49 @@ const US_LOCATIONS = [
 function initSession() {
     const jwt = localStorage.getItem('jwt');
     if (jwt) {
-        try {
-            const userEmail = localStorage.getItem('userEmail');
-            if (userEmail) {
-                state.user = { email: userEmail };
-                renderDashboard();
-                return;
-            }
-        } catch (err) {
-            console.error('Error restoring session:', err);
+    try {
+      const userEmail = localStorage.getItem('userEmail');
+      if (userEmail) {
+        // Try to find local profile first
+        const profile = state.profiles.find(p => p.email === userEmail.toLowerCase());
+        if (profile) {
+          state.user = { email: userEmail.toLowerCase() };
+          renderDashboard();
+          return;
         }
+
+        // Fetch profile from backend
+        fetch(`${BACKEND_URL}/api/users/profile`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${jwt}` }
+        })
+        .then(async res => {
+          if (!res.ok) throw new Error('Failed to restore session');
+          const data = await res.json();
+          const userProfile = data.profile || data.user || data;
+          if (userProfile && userProfile.email) {
+            userProfile.email = userProfile.email.toLowerCase();
+            // merge into local profiles
+            state.profiles = state.profiles.filter(p => p.email !== userProfile.email).concat(userProfile);
+            save();
+            state.user = { email: userProfile.email };
+            renderDashboard();
+            return;
+          }
+          state.user = { email: userEmail.toLowerCase() };
+          renderDashboard();
+        })
+        .catch(err => {
+          console.error('Error restoring session:', err);
+          localStorage.removeItem('jwt');
+          localStorage.removeItem('userEmail');
+          renderHome();
+        });
+        return;
+      }
+    } catch (err) {
+      console.error('Error restoring session:', err);
+    }
     }
     renderHome();
 }
