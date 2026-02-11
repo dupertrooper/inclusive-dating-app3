@@ -1010,24 +1010,6 @@ function renderMatches(){
   }
 
   proceedWithProfile(userProfile);
-            const initials=(profile.name||email).split(' ').map(n=>n[0]).join('').toUpperCase();
-            return `
-              <div class="match-card">
-                <div class="match-avatar" style="background:${images[0]?'':'linear-gradient(135deg,#667eea 0%,#764ba2 100%)'};">
-                  ${images[0]?`<img src="${images[0]}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`:initials}
-                </div>
-                <div class="match-name">${profile.name}</div>
-                <div class="match-status">Matched!</div>
-                <button class="btn-primary" style="width:100%;margin-top:10px;padding:8px;font-size:0.9em;" onclick="startMessage('${email}')">
-                  <i class="fas fa-envelope"></i> Message
-                </button>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      `}
-    </div>
-  `;
 }
 
 function renderMessages(){
