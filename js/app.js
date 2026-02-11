@@ -1,4 +1,5 @@
 const app = document.getElementById('app');
+const BACKEND_URL = 'https://inclusive-dating-app3.onrender.com';
 
 // STATE MANAGEMENT
 let state = {
@@ -21,8 +22,6 @@ const ADMIN_PASSWORD = 'Iamthebest101x';
 const profileSteps = ['Personal Info', 'Photos', 'Preferences'];
 let currentStep = 0;
 let uploadedImages = [];
-let spotifyConnected = false;
-let spotifyUser = null;
 let currentChatEmail = null;
 
 // US LOCATIONS - ALL STATES AND MAJOR CITIES
@@ -40,6 +39,24 @@ const US_LOCATIONS = [
     'San Diego', 'Dallas', 'San Jose', 'Austin', 'Jacksonville', 'Seattle', 'Denver', 'Boston',
     'Miami', 'Portland', 'Atlanta', 'Las Vegas', 'Nashville'
 ].sort();
+
+// Restore session on page load
+function initSession() {
+    const jwt = localStorage.getItem('jwt');
+    if (jwt) {
+        try {
+            const userEmail = localStorage.getItem('userEmail');
+            if (userEmail) {
+                state.user = { email: userEmail };
+                renderDashboard();
+                return;
+            }
+        } catch (err) {
+            console.error('Error restoring session:', err);
+        }
+    }
+    renderHome();
+}
 
 function save() {
     localStorage.setItem('profiles', JSON.stringify(state.profiles));
@@ -256,82 +273,83 @@ function signup() {
         return;
     }
     
-    if (state.profiles.find(p => p.email === email)) {
-        alert('Account already exists');
-        return;
-    }
-    
-    if (state.bannedUsers.includes(email)) {
-        alert('This account has been banned');
-        return;
-    }
-    
-    state.user = { email, password: pass };
-    state.profiles.push({
-        email,
-        name,
-        age: '',
-        gender: '',
-        orientation: '',
-        bio: '',
-        location: '',
-        interests: [],
-        customInterests: [],
-        lookingFor: '',
-        lookingForFriends: false,
-        spotifyId: '',
-        createdAt: new Date().toISOString(),
-        verified: false
+    // Call backend API
+    fetch(`${BACKEND_URL}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: pass, name })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+        // Store JWT and email for session
+        localStorage.setItem('jwt', data.token);
+        localStorage.setItem('userEmail', email);
+        state.user = { email };
+        renderEmailVerification(email);
+    })
+    .catch(err => {
+        console.error('Signup error:', err);
+        alert('Error creating account. Please try again.');
     });
-    state.images[email] = [];
-    state.messages[email] = {};
-    save();
-    
-    // Send verification code
-    const code = generateVerificationCode();
-    state.verificationCodes[email] = code;
-    save();
-    
-    renderEmailVerification(email, code);
 }
 
-function renderEmailVerification(email, code) {
+function renderEmailVerification(email) {
     app.innerHTML = `
-    <div class="card" style="text-align:center;">
-      <h3 style="color:#667eea;">Verify Your Email</h3>
-      <p style="color:#666;margin:15px 0;">
+    <div class="card" style="text-align:center;padding:30px;">
+      <h3 style="color:#667eea;margin-top:0;">✉️ Verify Your Email</h3>
+      <p style="color:#666;margin:15px 0;font-size:1.05em;">
         A verification code has been sent to:<br>
-        <strong>${email}</strong>
+        <strong style="color:#667eea;">${email}</strong>
       </p>
-      <p style="color:#999;font-size:0.9em;margin-bottom:20px;">
-        For demo purposes, your code is: <strong style="color:#667eea;font-size:1.1em;">${code}</strong>
-      </p>
-      <input id="verificationCode" type="text" placeholder="Enter verification code" maxlength="6">
+      <div style="background:#f5f5f5;padding:15px;border-radius:8px;margin:20px 0;border-left:4px solid #667eea;text-align:left;">
+        <p style="margin:0;color:#666;font-size:0.95em;"><strong>Check your email:</strong></p>
+        <p style="margin:8px 0 0 0;color:#999;font-size:0.9em;">Look for an email from Heart Dating App and enter the 6-digit code below</p>
+      </div>
+      <input id="verificationCode" type="text" placeholder="Enter 6-digit code" maxlength="6" style="text-align:center;letter-spacing:8px;font-size:1.5em;">
       <button class="btn-primary" style="width:100%;" onclick="verifyEmail('${email}')">
         <i class="fas fa-check"></i> Verify
       </button>
-      <button class="btn-secondary" style="width:100%;margin-top:10px;" onclick="renderHome()">Skip for Now</button>
+      <button class="btn-secondary" style="width:100%;margin-top:10px;" onclick="renderHome()">← Back Home</button>
     </div>
   `;
 }
 
 function verifyEmail(email) {
-    const code = document.getElementById('verificationCode').value;
-    const storedCode = state.verificationCodes[email];
+    const code = document.getElementById('verificationCode').value.trim();
     
-    if (code === storedCode) {
-        if (!state.verifiedUsers.includes(email)) {
-            state.verifiedUsers.push(email);
+    if (!code || code.length !== 6) {
+        alert('Please enter a valid 6-digit code');
+        return;
+    }
+    
+    // Call backend API to verify
+    const jwt = localStorage.getItem('jwt');
+    fetch(`${BACKEND_URL}/api/auth/verify-email`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${jwt}`
+        },
+        body: JSON.stringify({ code })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.error) {
+            alert(data.error);
+            return;
         }
-        const profile = state.profiles.find(p => p.email === email);
-        if (profile) profile.verified = true;
-        save();
         alert('✓ Email verified! Continuing to profile setup...');
         currentStep = 0;
         renderProfileSetup();
-    } else {
-        alert('Invalid verification code');
-    }
+    })
+    .catch(err => {
+        console.error('Verification error:', err);
+        alert('Error verifying email. Please try again.');
+    });
 }
 
 function renderLogin() {
@@ -352,34 +370,41 @@ function login() {
     const email = document.getElementById('email').value;
     const pass = document.getElementById('pass').value;
     
-    if (state.bannedUsers.includes(email)) {
-        alert('This account has been banned');
+    if (!email || !pass) {
+        alert('Please enter email and password');
         return;
     }
     
-    const user = state.profiles.find(p => p.email === email && p.password === pass);
-    
-    if (!user) {
-        alert('Invalid credentials');
-        return;
-    }
-    
-    // Age check
-    if (!user.age) {
-        state.user = { email, password: pass };
-        currentStep = 0;
-        renderProfileSetup();
-        return;
-    }
-    
-    const ageNum = parseInt(user.age);
-    if (ageNum < 18) {
-        renderAgeGate();
-        return;
-    }
-    
-    state.user = { email, password: pass };
-    renderDashboard();
+    // Call backend API
+    fetch(`${BACKEND_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: pass })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+        
+        // Store JWT and email for session persistence
+        localStorage.setItem('jwt', data.token);
+        localStorage.setItem('userEmail', email);
+        state.user = { email };
+        
+        // Check if profile complete
+        if (data.profileComplete) {
+            renderDashboard();
+        } else {
+            currentStep = 0;
+            renderProfileSetup();
+        }
+    })
+    .catch(err => {
+        console.error('Login error:', err);
+        alert('Error logging in. Please try again.');
+    });
 }
 
 function renderProfileSetup() {
@@ -474,14 +499,7 @@ function renderProfileSetup() {
     } else if(currentStep===2){
         stepContent=`
       <div class="form-step">
-        <h4 style="color:#667eea;margin-bottom:15px;">Connect Spotify</h4>
-        <p style="color:#666;margin-bottom:15px;">Share your music taste with matches! Let them know what you're vibing to.</p>
-        <button type="button" style="width:100%;padding:14px;background:linear-gradient(135deg,#1DB954 0%,#1ed760 100%);color:white;border:none;border-radius:10px;cursor:pointer;font-weight:600;font-size:1em;margin-bottom:20px;display:flex;align-items:center;justify-content:center;gap:10px;" onclick="connectSpotify()">
-          <i class="fab fa-spotify"></i> Connect Spotify
-        </button>
-        ${spotifyConnected?`<div style="background:#f0f0f0;padding:15px;border-radius:10px;margin-bottom:20px;text-align:center;"><p style="color:#667eea;font-weight:600;">✓ Spotify Connected!</p></div>`:'<p style="color:#999;text-align:center;margin-bottom:20px;">Your music taste will help us find perfect matches</p>'}
-        
-        <h4 style="color:#667eea;margin-bottom:15px;margin-top:20px;">What are you looking for?</h4>
+        <h4 style="color:#667eea;margin-bottom:15px;">What are you looking for?</h4>
         <select id="lookingFor" required style="margin-bottom:20px;">
           <option value="">Select what you're looking for</option>
           <option value="Relationship" ${userProfile.lookingFor==='Relationship'?'selected':''}>Serious Relationship</option>
@@ -615,15 +633,6 @@ function addCustomInterest(){
   }
 }
 
-function connectSpotify(){
-  alert('ℹ️ Spotify Integration:\n\nIn production, this will open Spotify OAuth login.\n\nFor now, marking as connected for demo!');
-  spotifyConnected=true;
-  const userProfile=state.profiles.find(p=>p.email===state.user.email);
-  userProfile.spotifyId='spotify_user_demo_' + Math.random().toString(36).substring(7);
-  save();
-  renderProfileSetup();
-}
-
 function removeImage(index){
   const images=state.images[state.user.email]||[];
   images.splice(index,1);
@@ -736,10 +745,11 @@ function renderSwipe(){
   const others=state.profiles.filter(p=>p.email!==state.user.email && !state.bannedUsers.includes(p.email));
   
   if(others.length===0){
-    app.innerHTML+=`
+    app.innerHTML=`
       <div class="card" style="text-align:center;padding:40px 20px;">
         <i class="fas fa-search" style="font-size:3em;color:#ddd;margin-bottom:10px;display:block;"></i>
         <p style="color:#999;">No more profiles to discover</p>
+        <button class="btn-secondary" onclick="renderFeed()" style="margin-top:20px;width:100%;"><i class="fas fa-arrow-left"></i> Back to Feed</button>
       </div>
     `;
     return;
@@ -749,37 +759,43 @@ function renderSwipe(){
   const images=state.images[profile.email]||[];
   const mainImage=images[0]?`<img src="${images[0]}" style="width:100%;height:100%;object-fit:cover;">`:`<i class="fas fa-user" style="font-size:2em;color:white;"></i>`;
   
-  app.innerHTML+=`
-    <div class="swipe-container" id="swiperContainer">
-      <div class="swipe-card" id="swipeCard" data-email="${profile.email}" data-photo="0" data-total="${images.length}" style="transform:translateX(0) rotate(0deg);cursor:pointer;">
-        <div class="card-image photo-display" onclick="nextPhoto('${profile.email}')" style="position:relative;">
-          ${mainImage}
-          ${images.length>1?`<div style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.5);color:white;padding:6px 12px;border-radius:20px;font-size:0.85em;font-weight:600;">1/${images.length}</div>`:''} 
-        </div>
-        <div class="card-info">
-          <div class="card-name">${profile.name}, ${profile.age}</div>
-          <div class="card-details">${profile.gender} • ${profile.orientation}${profile.lookingForFriends?' • 👥 Wants friends':''}</div>
-          <div class="card-bio">${profile.bio||'No bio'}</div>
-          ${profile.lookingFor?`<div style="color:#667eea;font-weight:600;font-size:0.9em;margin-top:5px;">Looking for: ${profile.lookingFor}</div>`:''} 
+  app.innerHTML=`
+    <div style="padding:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <h2 style="color:#667eea;margin:0;">Discover</h2>
+        <button class="btn-secondary" style="width:auto;" onclick="renderFeed()"><i class="fas fa-arrow-left"></i> Back</button>
+      </div>
+      <div class="swipe-container" id="swiperContainer">
+        <div class="swipe-card" id="swipeCard" data-email="${profile.email}" data-photo="0" data-total="${images.length}" style="transform:translateX(0) rotate(0deg);cursor:pointer;">
+          <div class="card-image photo-display" onclick="nextPhoto('${profile.email}')" style="position:relative;">
+            ${mainImage}
+            ${images.length>1?`<div style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.5);color:white;padding:6px 12px;border-radius:20px;font-size:0.85em;font-weight:600;">1/${images.length}</div>`:''} 
+          </div>
+          <div class="card-info">
+            <div class="card-name">${profile.name}, ${profile.age}</div>
+            <div class="card-details">${profile.gender} • ${profile.orientation}${profile.lookingForFriends?' • 👥 Wants friends':''}</div>
+            <div class="card-bio">${profile.bio||'No bio'}</div>
+            ${profile.lookingFor?`<div style="color:#667eea;font-weight:600;font-size:0.9em;margin-top:5px;">Looking for: ${profile.lookingFor}</div>`:''} 
+          </div>
         </div>
       </div>
+      
+      <div class="swipe-actions">
+        <button class="action-btn btn-pass" title="Pass" onclick="passUser('${profile.email}')">
+          <i class="fas fa-times"></i>
+        </button>
+        <button class="action-btn btn-like" title="Like" onclick="likeUser('${profile.email}')">
+          <i class="fas fa-heart"></i>
+        </button>
+        <button class="action-btn" style="background:#667eea;color:white;width:60px;height:60px;border-radius:50%;border:none;cursor:pointer;font-size:1.8em;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 15px rgba(0,0,0,0.2);transition:all 0.3s;" title="Message" onclick="startMessage('${profile.email}')">
+          <i class="fas fa-envelope"></i>
+        </button>
+      </div>
+      
+      ${images.length>0?`<div style="display:grid;grid-template-columns:repeat(${Math.min(images.length,5)},1fr);gap:8px;margin-top:20px;">
+        ${images.map((img,i)=>`<div style="height:50px;border-radius:8px;overflow:hidden;border:2px solid ${0===i?'#667eea':'transparent'};cursor:pointer;" onclick="jumpToPhoto('${profile.email}',${i});"><img src="${img}" style="width:100%;height:100%;object-fit:cover;"></div>`).join('')}
+      </div>`:''} 
     </div>
-    
-    <div class="swipe-actions">
-      <button class="action-btn btn-pass" title="Pass" onclick="passUser('${profile.email}')">
-        <i class="fas fa-times"></i>
-      </button>
-      <button class="action-btn btn-like" title="Like" onclick="likeUser('${profile.email}')">
-        <i class="fas fa-heart"></i>
-      </button>
-      <button class="action-btn" style="background:#667eea;color:white;width:60px;height:60px;border-radius:50%;border:none;cursor:pointer;font-size:1.8em;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 15px rgba(0,0,0,0.2);transition:all 0.3s;" title="Message" onclick="startMessage('${profile.email}')">
-        <i class="fas fa-envelope"></i>
-      </button>
-    </div>
-    
-    ${images.length>0?`<div style="display:grid;grid-template-columns:repeat(${Math.min(images.length,5)},1fr);gap:8px;margin-top:20px;">
-      ${images.map((img,i)=>`<div style="height:50px;border-radius:8px;overflow:hidden;border:2px solid ${0===i?'#667eea':'transparent'};cursor:pointer;" onclick="jumpToPhoto('${profile.email}',${i});"><img src="${img}" style="width:100%;height:100%;object-fit:cover;"></div>`).join('')}
-    </div>`:''} 
   `;
   
   setupCardSwipe();
@@ -1145,8 +1161,10 @@ function logout(){
   state.user=null;
   currentStep=0;
   uploadedImages=[];
-  spotifyConnected=false;
+  localStorage.removeItem('jwt');
+  localStorage.removeItem('userEmail');
   renderHome();
 }
 
-renderHome();
+// Initialize session on page load
+initSession();
