@@ -24,17 +24,34 @@ const productionErrorHandler = require('./middleware/errorHandler');
 const app = express();
 const server = http.createServer(app);
 
+// Parse FRONTEND_URL to handle multiple origins
+const getFrontendUrls = () => {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8000';
+    return frontendUrl.split(',').map(url => url.trim());
+};
+
+const allowedOrigins = getFrontendUrls();
+
 // Socket.io setup
 const io = socketIO(server, {
     cors: {
-        origin: process.env.FRONTEND_URL || 'http://localhost:8000',
+        origin: allowedOrigins,
         methods: ['GET', 'POST']
     }
 });
 
 // Middleware
 app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:8000',
+    origin: (origin, callback) => {
+        // Allow requests with no origin (mobile apps, curl requests, etc)
+        if (!origin) return callback(null, true);
+
+        if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+            callback(null, true);
+        } else {
+            callback(new Error('CORS blocked'));
+        }
+    },
     credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));

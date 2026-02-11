@@ -56,18 +56,14 @@ const sendVerificationEmail = async(email, code) => {
 // @desc Register new user
 router.post('/register', async(req, res) => {
     try {
-        const { email, password, confirmPassword } = req.body;
+        const { email, password } = req.body;
 
-        if (!email || !password || !confirmPassword) {
-            return res.status(400).json({ error: 'All fields required' });
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password required' });
         }
 
-        if (password !== confirmPassword) {
-            return res.status(400).json({ error: 'Passwords do not match' });
-        }
-
-        if (password.length < 8) {
-            return res.status(400).json({ error: 'Password must be at least 8 characters' });
+        if (password.length < 6) {
+            return res.status(400).json({ error: 'Password must be at least 6 characters' });
         }
 
         // Check if user already exists
