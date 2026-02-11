@@ -45,49 +45,49 @@ const US_LOCATIONS = [
 function initSession() {
     const jwt = localStorage.getItem('jwt');
     if (jwt) {
-    try {
-      const userEmail = localStorage.getItem('userEmail');
-      if (userEmail) {
-        // Try to find local profile first
-        const profile = state.profiles.find(p => p.email === userEmail.toLowerCase());
-        if (profile) {
-          state.user = { email: userEmail.toLowerCase() };
-          renderDashboard();
-          return;
-        }
+        try {
+            const userEmail = localStorage.getItem('userEmail');
+            if (userEmail) {
+                // Try to find local profile first
+                const profile = state.profiles.find(p => p.email === userEmail.toLowerCase());
+                if (profile) {
+                    state.user = { email: userEmail.toLowerCase() };
+                    renderDashboard();
+                    return;
+                }
 
-        // Fetch profile from backend
-        fetch(`${BACKEND_URL}/api/users/profile`, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${jwt}` }
-        })
-        .then(async res => {
-          if (!res.ok) throw new Error('Failed to restore session');
-          const data = await res.json();
-          const userProfile = data.profile || data.user || data;
-          if (userProfile && userProfile.email) {
-            userProfile.email = userProfile.email.toLowerCase();
-            // merge into local profiles
-            state.profiles = state.profiles.filter(p => p.email !== userProfile.email).concat(userProfile);
-            save();
-            state.user = { email: userProfile.email };
-            renderDashboard();
-            return;
-          }
-          state.user = { email: userEmail.toLowerCase() };
-          renderDashboard();
-        })
-        .catch(err => {
-          console.error('Error restoring session:', err);
-          localStorage.removeItem('jwt');
-          localStorage.removeItem('userEmail');
-          renderHome();
-        });
-        return;
-      }
-    } catch (err) {
-      console.error('Error restoring session:', err);
-    }
+                // Fetch profile from backend
+                fetch(`${BACKEND_URL}/api/users/profile`, {
+                        method: 'GET',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${jwt}` }
+                    })
+                    .then(async res => {
+                        if (!res.ok) throw new Error('Failed to restore session');
+                        const data = await res.json();
+                        const userProfile = data.profile || data.user || data;
+                        if (userProfile && userProfile.email) {
+                            userProfile.email = userProfile.email.toLowerCase();
+                            // merge into local profiles
+                            state.profiles = state.profiles.filter(p => p.email !== userProfile.email).concat(userProfile);
+                            save();
+                            state.user = { email: userProfile.email };
+                            renderDashboard();
+                            return;
+                        }
+                        state.user = { email: userEmail.toLowerCase() };
+                        renderDashboard();
+                    })
+                    .catch(err => {
+                        console.error('Error restoring session:', err);
+                        localStorage.removeItem('jwt');
+                        localStorage.removeItem('userEmail');
+                        renderHome();
+                    });
+                return;
+            }
+        } catch (err) {
+            console.error('Error restoring session:', err);
+        }
     }
     renderHome();
 }
@@ -941,28 +941,75 @@ function passUser(email){
 }
 
 function renderMatches(){
-  const matches=state.matches[state.user.email]||[];
-  
-  app.innerHTML=`
+  if (!state.user || !state.user.email) {
+    renderHome();
+    return;
+  }
+
+  let userProfile = state.profiles.find(p=>p.email===state.user.email);
+  const userImages = state.images[state.user.email]||[];
+
+  const proceedWithProfile = (profile) => {
+    // normalize name fields
+    if (!profile.name && profile.fullName) profile.name = profile.fullName;
+    const displayName = (profile.name || profile.fullName || profile.email || '').toString();
+    const initials = displayName.split(' ').filter(Boolean).map(n=>n[0]).join('').toUpperCase() || displayName.slice(0,2).toUpperCase();
+
+    app.innerHTML=`
     <div class="nav">
-      <button onclick="renderSwipe()"><i class="fas fa-fire"></i> Discover</button>
-      <button class="active"><i class="fas fa-heart"></i> Matches</button>
+      <button class="active" onclick="renderSwipe()"><i class="fas fa-fire"></i> Discover</button>
+      <button onclick="renderMatches()"><i class="fas fa-heart"></i> Matches</button>
       <button onclick="renderMessages()"><i class="fas fa-envelope"></i> Messages</button>
       <button onclick="renderEditProfile()"><i class="fas fa-user"></i> Profile</button>
     </div>
     
-    <div class="card">
-      <h3><i class="fas fa-heart"></i> Your Matches</h3>
-      ${matches.length===0?`
-        <p style="text-align:center;color:#999;padding:30px 0;">
-          <i class="fas fa-search" style="font-size:2em;display:block;margin-bottom:10px;"></i>
-          No matches yet. Keep swiping!
-        </p>
-      `:`
-        <div class="matches-container">
-          ${matches.map(email=>{
-            const profile=state.profiles.find(p=>p.email===email);
-            const images=state.images[email]||[];
+    <div class="profile-header">
+      <div class="user-info">
+        <div class="user-avatar">${userImages[0]?`<img src="${userImages[0]}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`:initials}</div>
+        <div class="user-details">
+          <h3>${displayName}${profile.age?`, ${profile.age}`:''}</h3>
+          <p><i class="fas fa-map-marker-alt"></i> ${profile.location||''}</p>
+        </div>
+      </div>
+    </div>
+  `;
+    renderSwipe();
+  };
+
+  if (!userProfile) {
+    // try to fetch from backend if JWT exists
+    const jwt = localStorage.getItem('jwt');
+    if (jwt) {
+      fetch(`${BACKEND_URL}/api/users/profile`, { headers: { 'Authorization': `Bearer ${jwt}` } })
+        .then(res => res.ok ? res.json() : Promise.reject('Failed to load profile'))
+        .then(data => {
+          const fetched = data.profile || data.user || data;
+          if (fetched && fetched.email) {
+            fetched.email = fetched.email.toLowerCase();
+            // merge into local profiles
+            state.profiles = state.profiles.filter(p => p.email !== fetched.email).concat(fetched);
+            save();
+            userProfile = fetched;
+            proceedWithProfile(userProfile);
+            return;
+          }
+          // fallback to profile setup
+          currentStep = 0;
+          renderProfileSetup();
+        })
+        .catch(err => {
+          console.error('Failed to fetch profile:', err);
+          currentStep = 0;
+          renderProfileSetup();
+        });
+      return;
+    }
+    // no jwt - send to home
+    renderHome();
+    return;
+  }
+
+  proceedWithProfile(userProfile);
             const initials=(profile.name||email).split(' ').map(n=>n[0]).join('').toUpperCase();
             return `
               <div class="match-card">
