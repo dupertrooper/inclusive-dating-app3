@@ -6,6 +6,7 @@ const BannedUser = require('../models/BannedUser');
 const nodemailer = require('nodemailer');
 
 const router = express.Router();
+const { authLimiter } = require('../middleware/rateLimiter');
 
 // Email transporter configuration
 const transporter = nodemailer.createTransport({
@@ -113,7 +114,7 @@ router.post('/register', async(req, res) => {
 
 // @route POST /api/auth/login
 // @desc Login user
-router.post('/login', async(req, res) => {
+router.post('/login', authLimiter, async(req, res) => {
     try {
         const { email, password } = req.body;
 

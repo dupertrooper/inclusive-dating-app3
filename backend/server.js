@@ -93,8 +93,8 @@ async function start() {
 
 // Routes
 // Routes
-// Apply stricter limiter to auth routes
-app.use('/api/auth', authLimiter, authRoutes);
+// Mount auth routes (rate limiting applied to login only)
+app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/admin', adminRoutes);
