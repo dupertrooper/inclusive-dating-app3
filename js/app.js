@@ -570,7 +570,25 @@ function login() {
 function renderProfileSetup() {
     const progress = (currentStep + 1) / profileSteps.length * 100;
     const step = profileSteps[currentStep];
-    const userProfile = state.profiles.find(p => p.email === state.user.email);
+    let userProfile = state.profiles.find(p => p.email === state.user.email);
+    
+    // Create profile if it doesn't exist yet (new signup)
+    if (!userProfile) {
+        userProfile = {
+            email: state.user.email,
+            name: '',
+            age: null,
+            gender: null,
+            orientation: null,
+            interests: [],
+            customInterests: [],
+            location: '',
+            photos: [],
+            bio: ''
+        };
+        state.profiles.push(userProfile);
+        save();
+    }
 
     let stepContent = '';
     const genderOptions = ['Man', 'Woman', 'Non-binary', 'Genderqueer', 'Two-Spirit', 'Transgender Man', 'Transgender Woman', 'Agender', 'Bigender', 'Prefer to self-define', 'Prefer not to say'];
