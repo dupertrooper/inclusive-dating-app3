@@ -392,7 +392,14 @@ function signup() {
     state.user = { email: email.toLowerCase() };
     state.isSigningUp = false;
     if (btn) btn.innerHTML = originalBtnText;
-    renderEmailVerification(email.toLowerCase());
+    
+    // If user is already verified (email verification disabled), skip to profile setup
+    if (data.isVerified) {
+      currentStep = 0;
+      renderProfileSetup();
+    } else {
+      renderEmailVerification(email.toLowerCase());
+    }
   })
   .catch(err => {
     console.error('Signup error:', err);

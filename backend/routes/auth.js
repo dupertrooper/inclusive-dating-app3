@@ -79,20 +79,9 @@ router.post('/register', async(req, res) => {
             return res.status(403).json({ error: 'This email has been banned' });
         }
 
-        // Create user
-        const user = new User({ email: email.toLowerCase(), password });
+        // Create user (mark as verified - email verification disabled for now)
+        const user = new User({ email: email.toLowerCase(), password, isVerified: true });
         await user.save();
-
-        // Generate verification code
-        const code = generateVerificationCode();
-        const verificationCode = new VerificationCode({
-            email: email.toLowerCase(),
-            code
-        });
-        await verificationCode.save();
-
-        // Send verification email
-        await sendVerificationEmail(email.toLowerCase(), code);
 
         // Generate token
         const token = generateToken(user._id, user.email);
