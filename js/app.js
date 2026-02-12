@@ -941,10 +941,15 @@ function renderSwipe(){
   
   if(others.length===0){
     app.innerHTML=`
-      <div class="card" style="text-align:center;padding:40px 20px;">
-        <i class="fas fa-search" style="font-size:3em;color:#ddd;margin-bottom:10px;display:block;"></i>
-        <p style="color:#999;">No more profiles to discover</p>
-        <button class="btn-secondary" onclick="renderFeed()" style="margin-top:20px;width:100%;"><i class="fas fa-arrow-left"></i> Back to Feed</button>
+      <div style="padding:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+          <h2 style="color:#667eea;margin:0;">Discover</h2>
+          <button class="btn-secondary" style="width:auto;" onclick="renderDashboard()"><i class="fas fa-arrow-left"></i> Back</button>
+        </div>
+        <div class="card" style="text-align:center;padding:40px 20px;">
+          <i class="fas fa-search" style="font-size:3em;color:#ddd;margin-bottom:10px;display:block;"></i>
+          <p style="color:#999;">No profiles to discover yet. Check back soon as more people join!</p>
+        </div>
       </div>
     `;
     return;
@@ -952,13 +957,15 @@ function renderSwipe(){
   
   const profile=others[0];
   const images=state.images[profile.email]||[];
+  const displayName = profile.name || profile.email || 'User';
+  const displayAge = profile.age || 'Age not set';
   const mainImage=images[0]?`<img src="${images[0]}" style="width:100%;height:100%;object-fit:cover;">`:`<i class="fas fa-user" style="font-size:2em;color:white;"></i>`;
   
   app.innerHTML=`
     <div style="padding:20px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
         <h2 style="color:#667eea;margin:0;">Discover</h2>
-        <button class="btn-secondary" style="width:auto;" onclick="renderFeed()"><i class="fas fa-arrow-left"></i> Back</button>
+        <button class="btn-secondary" style="width:auto;" onclick="renderDashboard()"><i class="fas fa-arrow-left"></i> Back</button>
       </div>
       <div class="swipe-container" id="swiperContainer">
         <div class="swipe-card" id="swipeCard" data-email="${profile.email}" data-photo="0" data-total="${images.length}" style="transform:translateX(0) rotate(0deg);cursor:pointer;">
@@ -967,8 +974,8 @@ function renderSwipe(){
             ${images.length>1?`<div style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.5);color:white;padding:6px 12px;border-radius:20px;font-size:0.85em;font-weight:600;">1/${images.length}</div>`:''} 
           </div>
           <div class="card-info">
-            <div class="card-name">${profile.name}, ${profile.age}</div>
-            <div class="card-details">${profile.gender} • ${profile.orientation}${profile.lookingForFriends?' • 👥 Wants friends':''}</div>
+            <div class="card-name">${displayName}, ${displayAge}</div>
+            <div class="card-details">${profile.gender || 'Not specified'} • ${profile.orientation || 'Not specified'}${profile.lookingForFriends?' • 👥 Wants friends':''}</div>
             <div class="card-bio">${profile.bio||'No bio'}</div>
             ${profile.lookingFor?`<div style="color:#667eea;font-weight:600;font-size:0.9em;margin-top:5px;">Looking for: ${profile.lookingFor}</div>`:''} 
           </div>
@@ -1096,35 +1103,7 @@ function renderMatches(){
   let userProfile = state.profiles.find(p=>p.email===state.user.email);
   const userImages = state.images[state.user.email]||[];
 
-  const proceedWithProfile = (profile) => {
-    // normalize name fields
-    if (!profile.name && profile.fullName) profile.name = profile.fullName;
-    const displayName = (profile.name || profile.fullName || profile.email || '').toString();
-    const initials = displayName.split(' ').filter(Boolean).map(n=>n[0]).join('').toUpperCase() || displayName.slice(0,2).toUpperCase();
-
-    app.innerHTML=`
-    <div class="nav">
-      <button class="active" onclick="renderSwipe()"><i class="fas fa-fire"></i> Discover</button>
-      <button onclick="renderMatches()"><i class="fas fa-heart"></i> Matches</button>
-      <button onclick="renderMessages()"><i class="fas fa-envelope"></i> Messages</button>
-      <button onclick="renderEditProfile()"><i class="fas fa-user"></i> Profile</button>
-    </div>
-    
-    <div class="profile-header">
-      <div class="user-info">
-        <div class="user-avatar">${userImages[0]?`<img src="${userImages[0]}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`:initials}</div>
-        <div class="user-details">
-          <h3>${displayName}${profile.age?`, ${profile.age}`:''}</h3>
-          <p><i class="fas fa-map-marker-alt"></i> ${profile.location||''}</p>
-        </div>
-      </div>
-    </div>
-  `;
-    renderSwipe();
-  };
-
   if (!userProfile) {
-    // try to fetch from backend if JWT exists
     const jwt = localStorage.getItem('jwt');
     if (jwt) {
       fetch(`${BACKEND_URL}/api/users/profile`, { headers: { 'Authorization': `Bearer ${jwt}` } })
@@ -1133,14 +1112,11 @@ function renderMatches(){
           const fetched = data.profile || data.user || data;
           if (fetched && fetched.email) {
             fetched.email = fetched.email.toLowerCase();
-            // merge into local profiles
             state.profiles = state.profiles.filter(p => p.email !== fetched.email).concat(fetched);
             save();
-            userProfile = fetched;
-            proceedWithProfile(userProfile);
+            renderMatches();
             return;
           }
-          // fallback to profile setup
           currentStep = 0;
           renderProfileSetup();
         })
@@ -1151,12 +1127,76 @@ function renderMatches(){
         });
       return;
     }
-    // no jwt - send to home
     renderHome();
     return;
   }
 
-  proceedWithProfile(userProfile);
+  // normalize name fields
+  if (!userProfile.name && userProfile.fullName) userProfile.name = userProfile.fullName;
+  const displayName = (userProfile.name || userProfile.fullName || userProfile.email || '').toString();
+  const initials = displayName.split(' ').filter(Boolean).map(n=>n[0]).join('').toUpperCase() || displayName.slice(0,2).toUpperCase();
+
+  // Get mutual matches (both users liked each other)
+  const userLikes = state.likes[state.user.email] || [];
+  const matchedEmails = userLikes.filter(liked => {
+    const theirLikes = state.likes[liked] || [];
+    return theirLikes.includes(state.user.email);
+  });
+
+  const matchProfiles = matchedEmails.map(email => state.profiles.find(p => p.email === email)).filter(Boolean);
+
+  app.innerHTML=`
+    <div class="nav">
+      <button onclick="renderSwipe()"><i class="fas fa-fire"></i> Discover</button>
+      <button class="active" onclick="renderMatches()"><i class="fas fa-heart"></i> Matches</button>
+      <button onclick="renderMessages()"><i class="fas fa-envelope"></i> Messages</button>
+      <button onclick="renderEditProfile()"><i class="fas fa-user"></i> Profile</button>
+    </div>
+    
+    <div class="profile-header">
+      <div class="user-info">
+        <div class="user-avatar">${userImages[0]?`<img src="${userImages[0]}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`:initials}</div>
+        <div class="user-details">
+          <h3>${displayName}${userProfile.age?`, ${userProfile.age}`:''}</h3>
+          <p><i class="fas fa-map-marker-alt"></i> ${userProfile.location||''}</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content">
+      <h2 style="color:#667eea;text-align:center;margin:20px 0;">${matchProfiles.length > 0 ? '💕 Your Matches' : '💔 No Matches Yet'}</h2>
+      ${matchProfiles.length === 0 ? `
+        <div style="text-align:center;padding:40px 20px;color:#999;">
+          <p>No matches yet. Keep swiping to find your perfect match!</p>
+          <button class="btn-primary" onclick="renderSwipe()" style="margin-top:20px;">
+            <i class="fas fa-fire"></i> Start Swiping
+          </button>
+        </div>
+      ` : `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;padding:20px;">
+          ${matchProfiles.map(match => {
+            const matchImages = state.images[match.email] || [];
+            const initials = (match.name || match.email || '').split(' ').filter(Boolean).map(n=>n[0]).join('').toUpperCase();
+            return `
+              <div style="background:white;border-radius:12px;overflow:hidden;box-shadow:0 5px 15px rgba(0,0,0,0.1);">
+                <div style="height:200px;background:#f0f0f0;position:relative;overflow:hidden;">
+                  ${matchImages[0] ? `<img src="${matchImages[0]}" style="width:100%;height:100%;object-fit:cover;">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:3em;color:#ddd;">${initials}</div>`}
+                </div>
+                <div style="padding:15px;">
+                  <h3 style="margin:0 0 8px 0;color:#333;">${match.name || match.email}${match.age ? `, ${match.age}` : ''}</h3>
+                  <p style="margin:0;color:#666;font-size:0.9em;"><i class="fas fa-map-marker-alt"></i> ${match.location || 'Location not set'}</p>
+                  <p style="margin:8px 0 0 0;color:#667eea;font-size:0.85em;">${match.interests ? match.interests.slice(0,3).join(', ') : 'No interests'}</p>
+                  <button class="btn-primary" style="width:100%;margin-top:12px;" onclick="renderMessages()">
+                    <i class="fas fa-envelope"></i> Message
+                  </button>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `}
+    </div>
+  `;
 }
 
 function renderMessages(){
