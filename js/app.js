@@ -104,6 +104,18 @@ function save() {
     localStorage.setItem('adminLogs', JSON.stringify(state.adminLogs));
 }
 
+// Helper to set app HTML with smooth fade animation
+function setAppHTML(html, cb) {
+    app.classList.add('page-fade-out');
+    setTimeout(() => {
+        app.classList.remove('page-fade-out');
+        app.innerHTML = html;
+        app.classList.add('page-fade-in');
+        setTimeout(() => app.classList.remove('page-fade-in'), 220);
+        if (typeof cb === 'function') cb();
+    }, 180);
+}
+
 function addAdminLog(action, details) {
     state.adminLogs.push({
         timestamp: new Date().toISOString(),
@@ -212,6 +224,7 @@ function renderAdminDashboard() {
                   <button class="btn-secondary" style="background:#ff4757;color:white;padding:6px 12px;font-size:0.9em;" onclick="banUser('${user.email}')">Ban</button>
                 `}
                 <button class="btn-secondary" style="background:#ffa502;color:white;padding:6px 12px;font-size:0.9em;" onclick="adminDeletePhotos('${user.email}')">Delete Photos</button>
+                <button class="btn-secondary" style="background:#5dade2;color:white;padding:6px 12px;font-size:0.9em;" onclick="adminViewPhotos('${user.email}')">View Photos</button>
               </div>
             </div>
           `).join('')}
@@ -261,6 +274,49 @@ function adminDeletePhotos(email) {
 function adminLogout() {
     state.admin = null;
     renderHome();
+}
+
+function adminViewPhotos(email){
+  const images = state.images[email] || [];
+  const modal = document.createElement('div');
+  modal.id = 'adminPhotoModal';
+  modal.style.position='fixed';
+  modal.style.top='0'; modal.style.left='0'; modal.style.width='100%'; modal.style.height='100%';
+  modal.style.background='rgba(0,0,0,0.6)'; modal.style.display='flex'; modal.style.alignItems='center'; modal.style.justifyContent='center';
+  modal.style.zIndex='9999';
+  const inner = document.createElement('div');
+  inner.style.width='90%'; inner.style.maxWidth='900px'; inner.style.maxHeight='80%'; inner.style.overflowY='auto'; inner.style.background='white'; inner.style.borderRadius='12px'; inner.style.padding='18px';
+  inner.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3>Photos for ${email}</h3><button style="background:#ff4757;color:white;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;" onclick="closeAdminPhotosModal()">Close</button></div>`;
+  if(images.length===0){ inner.innerHTML += '<p style="color:#999;">No photos uploaded</p>'; }
+  else{
+    const grid=document.createElement('div');
+    grid.style.display='grid'; grid.style.gridTemplateColumns='repeat(auto-fit,minmax(120px,1fr))'; grid.style.gap='12px';
+    images.forEach((img,i)=>{
+      const cell=document.createElement('div'); cell.style.position='relative'; cell.style.borderRadius='8px'; cell.style.overflow='hidden'; cell.style.boxShadow='0 5px 15px rgba(0,0,0,0.1)';
+      const imageEl=document.createElement('img'); imageEl.src=img; imageEl.style.width='100%'; imageEl.style.height='140px'; imageEl.style.objectFit='cover';
+      const del=document.createElement('button'); del.textContent='Delete'; del.style.position='absolute'; del.style.top='8px'; del.style.right='8px'; del.style.background='#ff4757'; del.style.color='white'; del.style.border='none'; del.style.padding='6px 8px'; del.style.borderRadius='6px'; del.style.cursor='pointer';
+      del.onclick=()=>{ if(confirm('Delete this photo?')) adminDeletePhoto(email,i); };
+      cell.appendChild(imageEl); cell.appendChild(del); grid.appendChild(cell);
+    });
+    inner.appendChild(grid);
+  }
+  modal.appendChild(inner);
+  document.body.appendChild(modal);
+}
+
+function closeAdminPhotosModal(){
+  const m=document.getElementById('adminPhotoModal'); if(m) m.remove();
+}
+
+function adminDeletePhoto(email,index){
+  const imgs=state.images[email]||[];
+  if(index<0||index>=imgs.length) return;
+  imgs.splice(index,1);
+  state.images[email]=imgs;
+  addAdminLog('DELETE_PHOTO', `Deleted photo ${index} for ${email}`);
+  save();
+  closeAdminPhotosModal();
+  adminViewPhotos(email);
 }
 
 function renderAgeGate() {
@@ -475,7 +531,7 @@ function renderProfileSetup() {
         <label style="display:block;color:#666;font-weight:600;margin:15px 0 10px;">Age Group</label>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:15px;">
           ${ageGroups.map(age=>`
-            <button type="button" style="padding:10px;border:2px solid ${userProfile.age===age?'#667eea':'#ddd'};background:${userProfile.age===age?'#f0f4ff':'white'};color:${userProfile.age===age?'#667eea':'#333'};border-radius:10px;cursor:pointer;font-weight:600;transition:all 0.3s;font-size:0.9em;" onclick="selectAge('${age}')">${age}</button>
+            <button type="button" data-group="age" data-value="${age}" style="padding:10px;border:2px solid ${userProfile.age===age?'#667eea':'#ddd'};background:${userProfile.age===age?'#f0f4ff':'white'};color:${userProfile.age===age?'#667eea':'#333'};border-radius:10px;cursor:pointer;font-weight:600;transition:all 0.3s;font-size:0.9em;" onclick="selectAge(this,'${age}')">${age}</button>
           `).join('')}
         </div>
         <div style="display:flex;gap:8px;margin-bottom:15px;align-items:center;">
@@ -486,14 +542,14 @@ function renderProfileSetup() {
         <label style="display:block;color:#666;font-weight:600;margin:15px 0 10px;">Gender</label>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:15px;">
           ${genderOptions.map(g=>`
-            <button type="button" style="padding:10px;border:2px solid ${userProfile.gender===g?'#667eea':'#ddd'};background:${userProfile.gender===g?'#f0f4ff':'white'};color:${userProfile.gender===g?'#667eea':'#333'};border-radius:10px;cursor:pointer;font-weight:600;transition:all 0.3s;font-size:0.9em;" onclick="selectGender('${g}')">${g}</button>
+            <button type="button" data-group="gender" data-value="${g}" style="padding:10px;border:2px solid ${userProfile.gender===g?'#667eea':'#ddd'};background:${userProfile.gender===g?'#f0f4ff':'white'};color:${userProfile.gender===g?'#667eea':'#333'};border-radius:10px;cursor:pointer;font-weight:600;transition:all 0.3s;font-size:0.9em;" onclick="selectGender(this,'${g}')">${g}</button>
           `).join('')}
         </div>
         
         <label style="display:block;color:#666;font-weight:600;margin:15px 0 10px;">Orientation</label>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:15px;">
           ${orientationOptions.map(o=>`
-            <button type="button" style="padding:10px;border:2px solid ${userProfile.orientation===o?'#667eea':'#ddd'};background:${userProfile.orientation===o?'#f0f4ff':'white'};color:${userProfile.orientation===o?'#667eea':'#333'};border-radius:10px;cursor:pointer;font-weight:600;transition:all 0.3s;font-size:0.9em;" onclick="selectOrientation('${o}')">${o}</button>
+            <button type="button" data-group="orientation" data-value="${o}" style="padding:10px;border:2px solid ${userProfile.orientation===o?'#667eea':'#ddd'};background:${userProfile.orientation===o?'#f0f4ff':'white'};color:${userProfile.orientation===o?'#667eea':'#333'};border-radius:10px;cursor:pointer;font-weight:600;transition:all 0.3s;font-size:0.9em;" onclick="selectOrientation(this,'${o}')">${o}</button>
           `).join('')}
         </div>
         
@@ -509,7 +565,7 @@ function renderProfileSetup() {
         <label style="display:block;color:#666;font-weight:600;margin:15px 0 10px;">Your Interests</label>
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
           ${allInterests.map(interest=>`
-            <button type="button" style="background:${userProfile.interests.includes(interest)?'linear-gradient(135deg,#667eea 0%,#764ba2 100%)':'#f0f0f0'};color:${userProfile.interests.includes(interest)?'white':'#333'};border:none;padding:8px 12px;border-radius:20px;cursor:pointer;transition:all 0.3s;font-size:0.9em;" onclick="toggleInterest('${interest}')">${interest}</button>
+            <button type="button" data-group="interest" data-value="${interest}" style="background:${userProfile.interests.includes(interest)?'linear-gradient(135deg,#667eea 0%,#764ba2 100%)':'#f0f0f0'};color:${userProfile.interests.includes(interest)?'white':'#333'};border:none;padding:8px 12px;border-radius:20px;cursor:pointer;transition:all 0.3s;font-size:0.9em;" onclick="toggleInterest(this,'${interest}')">${interest}</button>
           `).join('')}
         </div>
         <div style="display:flex;gap:8px;margin-bottom:15px;">
@@ -618,25 +674,40 @@ function handleImageUpload(event){
   reader.readAsDataURL(file);
 }
 
-function selectGender(gender){
+function selectGender(el, gender){
   const userProfile=state.profiles.find(p=>p.email===state.user.email);
+  if(!userProfile) return;
   userProfile.gender=gender;
   save();
-  renderProfileSetup();
+  const buttons=document.querySelectorAll('button[data-group="gender"]');
+  buttons.forEach(b=>{
+    if(b.dataset.value===gender){b.style.borderColor='#667eea'; b.style.background='#f0f4ff'; b.style.color='#667eea';}
+    else{b.style.borderColor='#ddd'; b.style.background='white'; b.style.color='#333';}
+  });
 }
 
-function selectOrientation(orientation){
+function selectOrientation(el, orientation){
   const userProfile=state.profiles.find(p=>p.email===state.user.email);
+  if(!userProfile) return;
   userProfile.orientation=orientation;
   save();
-  renderProfileSetup();
+  const buttons=document.querySelectorAll('button[data-group="orientation"]');
+  buttons.forEach(b=>{
+    if(b.dataset.value===orientation){b.style.borderColor='#667eea'; b.style.background='#f0f4ff'; b.style.color='#667eea';}
+    else{b.style.borderColor='#ddd'; b.style.background='white'; b.style.color='#333';}
+  });
 }
 
-function selectAge(ageGroup){
+function selectAge(el, ageGroup){
   const userProfile=state.profiles.find(p=>p.email===state.user.email);
+  if(!userProfile) return;
   userProfile.age=ageGroup;
   save();
-  renderProfileSetup();
+  const buttons=document.querySelectorAll('button[data-group="age"]');
+  buttons.forEach(b=>{
+    if(b.dataset.value===ageGroup){b.style.borderColor='#667eea'; b.style.background='#f0f4ff'; b.style.color='#667eea';}
+    else{b.style.borderColor='#ddd'; b.style.background='white'; b.style.color='#333';}
+  });
 }
 
 function selectCustomAge(){
@@ -689,19 +760,21 @@ function removeImage(index){
   renderProfileSetup();
 }
 
-function toggleInterest(interest){
+function toggleInterest(el, interest){
   const userProfile=state.profiles.find(p=>p.email===state.user.email);
+  if(!userProfile) return;
   const idx=userProfile.interests.indexOf(interest);
   if(idx>-1){
     userProfile.interests.splice(idx,1);
+    if(el){el.style.background='#f0f0f0'; el.style.color='#333';}
   }else if(userProfile.interests.length<5){
     userProfile.interests.push(interest);
+    if(el){el.style.background='linear-gradient(135deg,#667eea 0%,#764ba2 100%)'; el.style.color='white';}
   }else{
     alert('Maximum 5 interests');
     return;
   }
   save();
-  renderProfileSetup();
 }
 
 function nextStep(){
@@ -1177,7 +1250,7 @@ function renderEditProfile(){
       <label style="display:block;color:#666;font-weight:600;margin:10px 0;">Age Group</label>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:15px;">
         ${['18-25', '26-35', '36-45', '46-55', '56-65', '65+'].map(age=>`
-          <button type="button" style="padding:10px;border:2px solid ${userProfile.age===age?'#667eea':'#ddd'};background:${userProfile.age===age?'#f0f4ff':'white'};color:${userProfile.age===age?'#667eea':'#333'};border-radius:10px;cursor:pointer;font-weight:600;transition:all 0.3s;font-size:0.9em;" onclick="selectAge('${age}')">${age}</button>
+          <button type="button" data-group="age" data-value="${age}" style="padding:10px;border:2px solid ${userProfile.age===age?'#667eea':'#ddd'};background:${userProfile.age===age?'#f0f4ff':'white'};color:${userProfile.age===age?'#667eea':'#333'};border-radius:10px;cursor:pointer;font-weight:600;transition:all 0.3s;font-size:0.9em;" onclick="selectAge(this,'${age}')">${age}</button>
         `).join('')}
       </div>
       <div style="display:flex;gap:8px;margin-bottom:15px;align-items:center;">
@@ -1188,14 +1261,14 @@ function renderEditProfile(){
       <label style="display:block;color:#666;font-weight:600;margin:15px 0 10px;">Gender</label>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:15px;">
         ${['Man', 'Woman', 'Non-binary', 'Genderqueer', 'Two-Spirit', 'Transgender Man', 'Transgender Woman', 'Agender', 'Bigender', 'Prefer to self-define', 'Prefer not to say'].map(g=>`
-          <button type="button" style="padding:8px;border:2px solid ${userProfile.gender===g?'#667eea':'#ddd'};background:${userProfile.gender===g?'#f0f4ff':'white'};color:${userProfile.gender===g?'#667eea':'#333'};border-radius:8px;cursor:pointer;font-weight:600;transition:all 0.3s;font-size:0.85em;" onclick="selectGender('${g}')">${g}</button>
+          <button type="button" data-group="gender" data-value="${g}" style="padding:8px;border:2px solid ${userProfile.gender===g?'#667eea':'#ddd'};background:${userProfile.gender===g?'#f0f4ff':'white'};color:${userProfile.gender===g?'#667eea':'#333'};border-radius:8px;cursor:pointer;font-weight:600;transition:all 0.3s;font-size:0.85em;" onclick="selectGender(this,'${g}')">${g}</button>
         `).join('')}
       </div>
       
       <label style="display:block;color:#666;font-weight:600;margin:15px 0 10px;">Orientation</label>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:15px;">
         ${['Straight/Heterosexual', 'Gay', 'Lesbian', 'Bisexual', 'Asexual', 'Aromantic', 'Demisexual', 'Graysexual', 'Pansexual', 'Polysexual', 'Queer', 'Questioning', 'Prefer to self-define', 'Prefer not to say'].map(o=>`
-          <button type="button" style="padding:8px;border:2px solid ${userProfile.orientation===o?'#667eea':'#ddd'};background:${userProfile.orientation===o?'#f0f4ff':'white'};color:${userProfile.orientation===o?'#667eea':'#333'};border-radius:8px;cursor:pointer;font-weight:600;transition:all 0.3s;font-size:0.85em;" onclick="selectOrientation('${o}')">${o}</button>
+          <button type="button" data-group="orientation" data-value="${o}" style="padding:8px;border:2px solid ${userProfile.orientation===o?'#667eea':'#ddd'};background:${userProfile.orientation===o?'#f0f4ff':'white'};color:${userProfile.orientation===o?'#667eea':'#333'};border-radius:8px;cursor:pointer;font-weight:600;transition:all 0.3s;font-size:0.85em;" onclick="selectOrientation(this,'${o}')">${o}</button>
         `).join('')}
       </div>
       

@@ -511,6 +511,39 @@ textarea:focus {
 }
 
 
+/* Page fade transitions */
+
+.page-fade-out {
+    animation: pageFadeOut 0.18s ease forwards;
+}
+
+.page-fade-in {
+    animation: pageFadeIn 0.18s ease forwards;
+}
+
+@keyframes pageFadeOut {
+    from {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+}
+
+@keyframes pageFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+
 /* Responsive */
 
 @media(max-width:600px) {
