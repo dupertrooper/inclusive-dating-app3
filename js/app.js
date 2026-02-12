@@ -74,6 +74,20 @@ function initSession() {
     // Initial wake-up call
     fetch(`${BACKEND_URL}/api/health`).catch(() => {});
 
+    // Check for admin session first
+    const adminSession = localStorage.getItem('adminSession');
+    if (adminSession) {
+        try {
+            state.admin = JSON.parse(adminSession);
+            state.user = null;
+            renderAdminDashboard();
+            return;
+        } catch (err) {
+            console.error('Error restoring admin session:', err);
+            localStorage.removeItem('adminSession');
+        }
+    }
+
     const jwt = localStorage.getItem('jwt');
     if (jwt) {
         try {
@@ -206,6 +220,8 @@ function adminLogin() {
     if (email === ADMIN_EMAIL && pass === ADMIN_PASSWORD) {
         state.admin = { email };
         state.user = null;
+        // Persist admin session
+        localStorage.setItem('adminSession', JSON.stringify(state.admin));
         renderAdminDashboard();
     } else {
         alert('Invalid admin credentials');
@@ -304,6 +320,8 @@ function adminDeletePhotos(email) {
 
 function adminLogout() {
     state.admin = null;
+    // Clear admin session
+    localStorage.removeItem('adminSession');
     renderHome();
 }
 
