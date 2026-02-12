@@ -1,6 +1,29 @@
 const app = document.getElementById('app');
 const BACKEND_URL = 'https://inclusive-dating-app3.onrender.com';
 
+// Retry helper for failed fetches (handles Render cold starts)
+async function fetchWithRetry(url, options = {}, maxRetries = 3) {
+    let lastError;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const response = await Promise.race([
+                fetch(url, options),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Request timeout')), 25000))
+            ]);
+            return response;
+        } catch (err) {
+            lastError = err;
+            if (attempt < maxRetries) {
+                // Exponential backoff: 1s, 2s, 4s
+                const delay = Math.pow(2, attempt - 1) * 1000;
+                console.log(`Attempt ${attempt} failed (${err.message}). Retrying in ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+    }
+    throw lastError || new Error('Failed after retries');
+}
+
 // STATE MANAGEMENT
 let state = {
     user: null,
@@ -43,6 +66,14 @@ const US_LOCATIONS = [
 
 // Restore session on page load
 function initSession() {
+    // Wake up backend every 10 minutes to prevent cold start
+    setInterval(() => {
+        fetch(`${BACKEND_URL}/api/health`).catch(() => {});
+    }, 10 * 60 * 1000);
+    
+    // Initial wake-up call
+    fetch(`${BACKEND_URL}/api/health`).catch(() => {});
+    
     const jwt = localStorage.getItem('jwt');
     if (jwt) {
         try {
@@ -370,12 +401,12 @@ function signup() {
   const originalBtnText = btn ? btn.innerHTML : null;
   if (btn) btn.innerHTML = 'Creating account...';
 
-  // Call backend API
-  fetch(`${BACKEND_URL}/api/auth/register`, {
+  // Call backend API with retry
+  fetchWithRetry(`${BACKEND_URL}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password: pass, name })
-  })
+  }, 3)
   .then(async res => {
     const data = await res.json().catch(() => ({ error: 'Invalid server response' }));
     if (!res.ok) {
@@ -486,12 +517,12 @@ function login() {
         return;
     }
     
-    // Call backend API
-    fetch(`${BACKEND_URL}/api/auth/login`, {
+    // Call backend API with retry
+    fetchWithRetry(`${BACKEND_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password: pass })
-    })
+    }, 3)
     .then(res => res.json())
     .then(data => {
         if (data.error) {
@@ -514,7 +545,7 @@ function login() {
     })
     .catch(err => {
         console.error('Login error:', err);
-        alert('Error logging in. Please try again.');
+        alert('Error logging in. Server may be starting up - please try again.');
     });
 }
 
