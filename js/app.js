@@ -70,10 +70,10 @@ function initSession() {
     setInterval(() => {
         fetch(`${BACKEND_URL}/api/health`).catch(() => {});
     }, 10 * 60 * 1000);
-    
+
     // Initial wake-up call
     fetch(`${BACKEND_URL}/api/health`).catch(() => {});
-    
+
     const jwt = localStorage.getItem('jwt');
     if (jwt) {
         try {
