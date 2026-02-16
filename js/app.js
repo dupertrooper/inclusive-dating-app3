@@ -254,6 +254,10 @@ function renderAdminDashboard() {
         </div>
       </div>
       
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:10px;">
+        <button class="btn-secondary" style="background:#ff4757;color:white;" onclick="confirmEraseEmails()">Erase All Emails</button>
+      </div>
+      
       <div style="background:white;padding:20px;border-radius:15px;box-shadow:0 5px 15px rgba(0,0,0,0.1);margin-bottom:20px;">
         <h3 style="color:#667eea;margin-top:0;">Manage Users</h3>
         <div style="max-height:400px;overflow-y:auto;">
@@ -316,6 +320,27 @@ function adminDeletePhotos(email) {
         save();
         renderAdminDashboard();
     }
+}
+
+function confirmEraseEmails(){
+    if(!confirm('This will clear the email address for every user in the database. This action cannot be undone. Proceed?')) return;
+    fetch(`${BACKEND_URL}/api/admin/erase-emails`, { method: 'POST' })
+      .then(res=>res.json())
+      .then(data=>{
+          if(data.success){
+              alert('All emails erased.');
+              // also clear local copies
+              state.profiles = state.profiles.map(p=>({ ...p, email: '' }));
+              save();
+              renderAdminDashboard();
+          } else {
+              alert(data.error || 'Failed to erase emails');
+          }
+      })
+      .catch(err=>{
+          console.error('Erase emails error', err);
+          alert('Error erasing emails');
+      });
 }
 
 function adminLogout() {

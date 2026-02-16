@@ -176,6 +176,17 @@ router.get('/photos/:userId', protectAdmin, async(req, res) => {
     }
 });
 
+// @route POST /api/admin/erase-emails
+// @desc Erase all user emails from the database (admin only)
+router.post('/erase-emails', protectAdmin, async(req, res) => {
+    try {
+        await User.updateMany({}, { $set: { email: '' } });
+        res.json({ success: true, message: 'All user emails cleared' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // @route DELETE /api/admin/users/:userId
 // @desc Delete a user account and all associated data
 router.delete('/users/:userId', protectAdmin, async(req, res) => {
