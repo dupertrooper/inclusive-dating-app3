@@ -138,6 +138,7 @@ textarea:focus {
 
 
 /* Navigation Bar */
+
 .nav {
     display: flex;
     justify-content: space-around;
@@ -147,8 +148,9 @@ textarea:focus {
     position: sticky;
     top: 0;
     z-index: 1000;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
+
 .nav button {
     flex: 1;
     background: transparent;
@@ -162,10 +164,12 @@ textarea:focus {
     cursor: pointer;
     padding: 8px 0;
 }
+
 .nav button.active {
     color: #764ba2;
     border-bottom: 2px solid #764ba2;
 }
+
 
 /* Profile Setup - Card Style */
 
@@ -242,7 +246,9 @@ textarea:focus {
     margin: 15px 0;
 }
 
+
 /* reusable containers */
+
 .container {
     padding: 20px;
 }
@@ -254,7 +260,7 @@ textarea:focus {
     display: flex;
     align-items: center;
     gap: 15px;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
     margin-bottom: 20px;
 }
 
@@ -282,7 +288,7 @@ textarea:focus {
     height: 100%;
     background: white;
     border-radius: 20px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
     overflow: hidden;
 }
 
@@ -305,15 +311,31 @@ textarea:focus {
     justify-content: center;
     transition: transform 0.2s;
 }
-.action-btn:hover { transform: scale(1.1); }
-.action-btn.btn-pass { background: #ff4757; color:white; }
-.action-btn.btn-like { background: #2ed573; color:white; }
 
-@media (max-width: 600px) {
-    .swipe-container { height: 400px; }
-    .action-btn { width: 50px; height: 50px; font-size:1.2em; }
+.action-btn:hover {
+    transform: scale(1.1);
 }
 
+.action-btn.btn-pass {
+    background: #ff4757;
+    color: white;
+}
+
+.action-btn.btn-like {
+    background: #2ed573;
+    color: white;
+}
+
+@media (max-width: 600px) {
+    .swipe-container {
+        height: 400px;
+    }
+    .action-btn {
+        width: 50px;
+        height: 50px;
+        font-size: 1.2em;
+    }
+}
 
 .preview-item {
     position: relative;
