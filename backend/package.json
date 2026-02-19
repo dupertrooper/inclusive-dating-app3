@@ -6,6 +6,7 @@
     "scripts": {
         "start": "node server.js",
         "dev": "nodemon server.js",
+        "erase-emails": "node scripts/eraseEmails.js --yes",
         "build": "echo 'No build step required'",
         "prod": "NODE_ENV=production node server.js",
         "test": "jest",

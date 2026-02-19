@@ -151,6 +151,33 @@ router.post('/login', authLimiter, async(req, res) => {
     }
 });
 
+// @route POST /api/auth/admin-login
+// @desc Admin login - returns JWT for admin actions
+router.post('/admin-login', authLimiter, async(req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password required' });
+        }
+
+        const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@heart.local';
+        const ADMIN_PASS = process.env.ADMIN_PASSWORD || 'adminpassword';
+
+        if (email.toLowerCase() !== ADMIN_EMAIL.toLowerCase() || password !== ADMIN_PASS) {
+            return res.status(401).json({ error: 'Invalid admin credentials' });
+        }
+
+        // Generate admin token (use a static id 'admin' for admin sessions)
+        const token = generateToken('admin', ADMIN_EMAIL.toLowerCase());
+
+        res.json({ success: true, token, email: ADMIN_EMAIL.toLowerCase() });
+    } catch (error) {
+        console.error('Admin login error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Middleware to protect verify-email
 const { protect } = require('../middleware/auth');
 

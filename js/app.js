@@ -1,47 +1,11 @@
+import { state, save, addAdminLog } from './state.js';
+import { BACKEND_URL, fetchWithRetry, generateVerificationCode, ADMIN_EMAIL, ADMIN_PASSWORD } from './utils.js';
+
 const app = document.getElementById('app');
-const BACKEND_URL = 'https://inclusive-dating-app3.onrender.com';
 
-// Retry helper for failed fetches (handles Render cold starts)
-async function fetchWithRetry(url, options = {}, maxRetries = 3) {
-    let lastError;
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            const response = await Promise.race([
-                fetch(url, options),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Request timeout')), 25000))
-            ]);
-            return response;
-        } catch (err) {
-            lastError = err;
-            if (attempt < maxRetries) {
-                // Exponential backoff: 1s, 2s, 4s
-                const delay = Math.pow(2, attempt - 1) * 1000;
-                console.log(`Attempt ${attempt} failed (${err.message}). Retrying in ${delay}ms...`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-            }
-        }
-    }
-    throw lastError || new Error('Failed after retries');
-}
 
-// STATE MANAGEMENT
-let state = {
-    user: null,
-    admin: null,
-    isSigningUp: false,
-    profiles: JSON.parse(localStorage.getItem('profiles') || '[]'),
-    likes: JSON.parse(localStorage.getItem('likes') || '{}'),
-    matches: JSON.parse(localStorage.getItem('matches') || '{}'),
-    images: JSON.parse(localStorage.getItem('images') || '{}'),
-    messages: JSON.parse(localStorage.getItem('messages') || '{}'),
-    verifiedUsers: JSON.parse(localStorage.getItem('verifiedUsers') || '[]'),
-    verificationCodes: JSON.parse(localStorage.getItem('verificationCodes') || '{}'),
-    bannedUsers: JSON.parse(localStorage.getItem('bannedUsers') || '[]'),
-    adminLogs: JSON.parse(localStorage.getItem('adminLogs') || '[]')
-};
 
-const ADMIN_EMAIL = 'mbryce385@gmail.com';
-const ADMIN_PASSWORD = 'Iamthebest101x';
+
 
 const profileSteps = ['Personal Info', 'Photos', 'Preferences'];
 let currentStep = 0;
@@ -190,7 +154,7 @@ function renderHome() {
           <button class="btn-secondary" onclick="renderLogin()">
             <i class="fas fa-sign-in-alt"></i> Login
           </button>
-          <button class="btn-secondary" style="background:#667eea;color:white;" onclick="renderAdminLogin()">
+          <button class="btn-secondary admin-btn" onclick="renderAdminLogin()">
             <i class="fas fa-lock"></i> Admin
           </button>
         </div>
@@ -217,15 +181,34 @@ function adminLogin() {
     const email = document.getElementById('adminEmail').value;
     const pass = document.getElementById('adminPass').value;
 
-    if (email === ADMIN_EMAIL && pass === ADMIN_PASSWORD) {
-        state.admin = { email };
-        state.user = null;
-        // Persist admin session
-        localStorage.setItem('adminSession', JSON.stringify(state.admin));
-        renderAdminDashboard();
-    } else {
-        alert('Invalid admin credentials');
+    if (!email || !pass) {
+        alert('Please enter admin email and password');
+        return;
     }
+
+    // Call backend admin-login to obtain a JWT for admin-protected routes
+    fetch(`${BACKEND_URL}/api/auth/admin-login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password: pass })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data && data.token) {
+                state.admin = { email: data.email };
+                state.user = null;
+                localStorage.setItem('adminSession', JSON.stringify(state.admin));
+                localStorage.setItem('adminToken', data.token);
+                addAdminLog('ADMIN_LOGIN', `Admin ${data.email} logged in`);
+                renderAdminDashboard();
+            } else {
+                alert(data.error || 'Invalid admin credentials');
+            }
+        })
+        .catch(err => {
+            console.error('Admin login error', err);
+            alert('Error logging in as admin');
+        });
 }
 
 function renderAdminDashboard() {
@@ -233,62 +216,62 @@ function renderAdminDashboard() {
     const bannedCount = state.bannedUsers.length;
 
     app.innerHTML = `
-    <div style="padding: 20px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-        <h1 style="color:#667eea;margin:0;">💼 Admin Dashboard</h1>
-        <button class="btn-secondary" style="width:auto;" onclick="adminLogout()">Logout</button>
+    <div class="container">
+      <div class="flex-row mb-20">
+        <h1 class="text-primary">💼 Admin Dashboard</h1>
+        <button class="btn-secondary" onclick="adminLogout()">Logout</button>
       </div>
       
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:30px;">
-        <div style="background:white;padding:20px;border-radius:15px;box-shadow:0 5px 15px rgba(0,0,0,0.1);">
-          <div style="font-size:2em;color:#667eea;font-weight:700;">${allUsers.length}</div>
-          <div style="color:#999;">Total Users</div>
+      <div class="flex-row wrap-gap gap-15 mb-30">
+        <div class="stat-card center">
+          <div class="stat-number text-primary">${allUsers.length}</div>
+          <div>Total Users</div>
         </div>
-        <div style="background:white;padding:20px;border-radius:15px;box-shadow:0 5px 15px rgba(0,0,0,0.1);">
-          <div style="font-size:2em;color:#ff4757;font-weight:700;">${bannedCount}</div>
-          <div style="color:#999;">Banned Users</div>
+        <div class="stat-card center">
+          <div class="stat-number text-danger">${bannedCount}</div>
+          <div>Banned Users</div>
         </div>
-        <div style="background:white;padding:20px;border-radius:15px;box-shadow:0 5px 15px rgba(0,0,0,0.1);">
-          <div style="font-size:2em;color:#667eea;font-weight:700;">${state.verifiedUsers.length}</div>
-          <div style="color:#999;">Verified Users</div>
+        <div class="stat-card center">
+          <div class="stat-number text-primary">${state.verifiedUsers.length}</div>
+          <div>Verified Users</div>
         </div>
       </div>
       
-      <div style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:10px;">
-        <button class="btn-secondary" style="background:#ff4757;color:white;" onclick="confirmEraseEmails()">Erase All Emails</button>
+      <div class="flex-row justify-end gap-10 mb-10">
+        <button class="btn-secondary erase-btn" onclick="confirmEraseEmails()">Erase All Emails</button>
       </div>
       
-      <div style="background:white;padding:20px;border-radius:15px;box-shadow:0 5px 15px rgba(0,0,0,0.1);margin-bottom:20px;">
-        <h3 style="color:#667eea;margin-top:0;">Manage Users</h3>
-        <div style="max-height:400px;overflow-y:auto;">
+      <div class="admin-section mb-20">
+        <h3 class="text-primary">Manage Users</h3>
+        <div class="user-list" style="max-height:400px;overflow-y:auto;">
           ${allUsers.map(user => `
-            <div style="padding:12px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;">
-              <div>
-                <strong>${user.name}</strong><br>
-                <small style="color:#999;">${user.email}</small><br>
-                <small style="color:#667eea;">${user.age} • ${user.gender}</small>
+            <div class="user-row">
+              <div class="user-info">
+                <strong>${user.name}</strong>
+                <small class="text-muted">${user.email}</small>
+                <small class="text-primary">${user.age} • ${user.gender}</small>
               </div>
-              <div style="display:flex;gap:8px;">
+              <div class="user-actions">
                 ${state.bannedUsers.includes(user.email)?`
-                  <button class="btn-secondary" style="background:#28a745;color:white;padding:6px 12px;font-size:0.9em;" onclick="unbanUser('${user.email}')">Unban</button>
+                  <button class="btn-secondary unban-btn" onclick="unbanUser('${user.email}')">Unban</button>
                 `:`
-                  <button class="btn-secondary" style="background:#ff4757;color:white;padding:6px 12px;font-size:0.9em;" onclick="banUser('${user.email}')">Ban</button>
+                  <button class="btn-secondary ban-btn" onclick="banUser('${user.email}')">Ban</button>
                 `}
-                <button class="btn-secondary" style="background:#ffa502;color:white;padding:6px 12px;font-size:0.9em;" onclick="adminDeletePhotos('${user.email}')">Delete Photos</button>
-                <button class="btn-secondary" style="background:#5dade2;color:white;padding:6px 12px;font-size:0.9em;" onclick="adminViewPhotos('${user.email}')">View Photos</button>
+                <button class="btn-secondary delete-photos-btn" onclick="adminDeletePhotos('${user.email}')">Delete Photos</button>
+                <button class="btn-secondary view-photos-btn" onclick="adminViewPhotos('${user.email}')">View Photos</button>
               </div>
             </div>
           `).join('')}
         </div>
       </div>
       
-      <div style="background:white;padding:20px;border-radius:15px;box-shadow:0 5px 15px rgba(0,0,0,0.1);">
-        <h3 style="color:#667eea;margin-top:0;">Admin Logs</h3>
-        <div style="max-height:300px;overflow-y:auto;font-size:0.9em;">
+      <div class="admin-section mb-20">
+        <h3 class="text-primary mb-0">Admin Logs</h3>
+        <div class="log-container" style="max-height:300px;overflow-y:auto;">
           ${state.adminLogs.slice(-20).reverse().map(log => `
-            <div style="padding:8px;border-bottom:1px solid #eee;">
+            <div class="log-entry">
               <strong>${log.action}</strong> - ${log.details}<br>
-              <small style="color:#999;">${new Date(log.timestamp).toLocaleString()}</small>
+              <small>${new Date(log.timestamp).toLocaleString()}</small>
             </div>
           `).join('')}
         </div>
@@ -314,33 +297,83 @@ function unbanUser(email) {
 }
 
 function adminDeletePhotos(email) {
-    if (confirm(`Delete all photos for ${email}?`)) {
-        state.images[email] = [];
-        addAdminLog('DELETE_PHOTOS', `Deleted photos for: ${email}`);
-        save();
-        renderAdminDashboard();
+  if (!confirm(`Delete all photos for ${email}?`)) return;
+  const token = localStorage.getItem('adminToken');
+  if (!token) {
+    alert('Admin token missing. Please log in again.');
+    renderAdminLogin();
+    return;
+  }
+
+  // Attempt to find userId from local profiles by email
+  const user = state.profiles.find(p => (p.email||'').toLowerCase() === (email||'').toLowerCase());
+  const userId = user ? user._id || user.id : null;
+
+  if (!userId) {
+    // If we don't have userId locally, try to call admin users endpoint to find it
+    fetch(`${BACKEND_URL}/api/admin/users`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.json())
+      .then(data => {
+        const found = (data.users||[]).find(u => (u.email||'').toLowerCase() === (email||'').toLowerCase());
+        if (found) {
+          return fetch(`${BACKEND_URL}/api/admin/photos/${found._id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+        } else {
+          throw new Error('User not found on server');
+        }
+      })
+      .then(res => res.json())
+      .then(result => {
+        if (result.success) {
+          addAdminLog('DELETE_PHOTOS', `Deleted photos for: ${email}`);
+          // clear local copy if present
+          state.images[email] = [];
+          save();
+          renderAdminDashboard();
+        } else {
+          alert(result.error || 'Failed to delete photos');
+        }
+      })
+      .catch(err => { console.error('Delete photos error', err); alert('Error deleting photos'); });
+    return;
+  }
+
+  fetch(`${BACKEND_URL}/api/admin/photos/${userId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+    .then(res => res.json())
+    .then(result => {
+    if (result.success) {
+      addAdminLog('DELETE_PHOTOS', `Deleted photos for: ${email}`);
+      state.images[email] = [];
+      save();
+      renderAdminDashboard();
+    } else {
+      alert(result.error || 'Failed to delete photos');
     }
+    })
+    .catch(err => { console.error('Delete photos error', err); alert('Error deleting photos'); });
 }
 
 function confirmEraseEmails(){
-    if(!confirm('This will clear the email address for every user in the database. This action cannot be undone. Proceed?')) return;
-    fetch(`${BACKEND_URL}/api/admin/erase-emails`, { method: 'POST' })
-      .then(res=>res.json())
-      .then(data=>{
-          if(data.success){
-              alert('All emails erased.');
-              // also clear local copies
-              state.profiles = state.profiles.map(p=>({ ...p, email: '' }));
-              save();
-              renderAdminDashboard();
-          } else {
-              alert(data.error || 'Failed to erase emails');
-          }
-      })
-      .catch(err=>{
-          console.error('Erase emails error', err);
-          alert('Error erasing emails');
-      });
+  if(!confirm('This will clear the email address for every user in the database. This action cannot be undone. Proceed?')) return;
+  const token = localStorage.getItem('adminToken');
+  if (!token) { alert('Admin token missing. Please log in again.'); renderAdminLogin(); return; }
+
+  fetch(`${BACKEND_URL}/api/admin/erase-emails`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
+    .then(res=>res.json())
+    .then(data=>{
+      if(data.success){
+        alert('All emails erased.');
+        // also clear local copies
+        state.profiles = state.profiles.map(p=>({ ...p, email: '' }));
+        save();
+        renderAdminDashboard();
+      } else {
+        alert(data.error || 'Failed to erase emails');
+      }
+    })
+    .catch(err=>{
+      console.error('Erase emails error', err);
+      alert('Error erasing emails');
+    });
 }
 
 function adminLogout() {
@@ -351,7 +384,7 @@ function adminLogout() {
 }
 
 function adminViewPhotos(email){
-  const images = state.images[email] || [];
+  const token = localStorage.getItem('adminToken');
   const modal = document.createElement('div');
   modal.id = 'adminPhotoModal';
   modal.style.position='fixed';
@@ -359,23 +392,96 @@ function adminViewPhotos(email){
   modal.style.background='rgba(0,0,0,0.6)'; modal.style.display='flex'; modal.style.alignItems='center'; modal.style.justifyContent='center';
   modal.style.zIndex='9999';
   const inner = document.createElement('div');
-  inner.style.width='90%'; inner.style.maxWidth='900px'; inner.style.maxHeight='80%'; inner.style.overflowY='auto'; inner.style.background='white'; inner.style.borderRadius='12px'; inner.style.padding='18px';
-  inner.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3>Photos for ${email}</h3><button style="background:#ff4757;color:white;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;" onclick="closeAdminPhotosModal()">Close</button></div>`;
-  if(images.length===0){ inner.innerHTML += '<p style="color:#999;">No photos uploaded</p>'; }
-  else{
-    const grid=document.createElement('div');
-    grid.style.display='grid'; grid.style.gridTemplateColumns='repeat(auto-fit,minmax(120px,1fr))'; grid.style.gap='12px';
-    images.forEach((img,i)=>{
-      const cell=document.createElement('div'); cell.style.position='relative'; cell.style.borderRadius='8px'; cell.style.overflow='hidden'; cell.style.boxShadow='0 5px 15px rgba(0,0,0,0.1)';
-      const imageEl=document.createElement('img'); imageEl.src=img; imageEl.style.width='100%'; imageEl.style.height='140px'; imageEl.style.objectFit='cover';
-      const del=document.createElement('button'); del.textContent='Delete'; del.style.position='absolute'; del.style.top='8px'; del.style.right='8px'; del.style.background='#ff4757'; del.style.color='white'; del.style.border='none'; del.style.padding='6px 8px'; del.style.borderRadius='6px'; del.style.cursor='pointer';
-      del.onclick=()=>{ if(confirm('Delete this photo?')) adminDeletePhoto(email,i); };
-      cell.appendChild(imageEl); cell.appendChild(del); grid.appendChild(cell);
+  inner.style.width='95%'; inner.style.maxWidth='1100px'; inner.style.maxHeight='86%'; inner.style.overflowY='auto'; inner.style.background='white'; inner.style.borderRadius='12px'; inner.style.padding='18px';
+  inner.innerHTML = `<div class="flex-row mb-20"><h3>All Uploaded Photos</h3><div><button class="btn-secondary erase-btn" onclick="closeAdminPhotosModal()">Close</button></div></div>`;
+
+  // Try to fetch photos from backend (requires admin token), fallback to local state
+  const fetchPhotos = () => {
+    if (!token) return Promise.reject(new Error('No admin token'));
+    return fetch(`${BACKEND_URL}/api/admin/photos`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.json())
+      .then(data => {
+        if (!data.success) throw new Error(data.error || 'Failed to load photos');
+        return data.photos || [];
+      });
+  };
+
+  fetchPhotos().catch(() => {
+    // build from local state as fallback
+    const users = Object.keys(state.images||{}).map(emailKey => ({
+      email: emailKey,
+      fullName: (state.profiles.find(p=> (p.email||'').toLowerCase()===(emailKey||'').toLowerCase())||{}).name || '',
+      photos: state.images[emailKey]
+    }));
+    return users;
+  }).then(allUsers => {
+    if (!allUsers || allUsers.length===0) {
+      inner.innerHTML += '<p class="text-muted">No photos uploaded</p>';
+      modal.appendChild(inner);
+      document.body.appendChild(modal);
+      return;
+    }
+
+    const grid = document.createElement('div');
+    grid.style.display='grid'; grid.style.gridTemplateColumns='repeat(auto-fit,minmax(180px,1fr))'; grid.style.gap='14px';
+
+    allUsers.forEach(user => {
+      const userBlock = document.createElement('div');
+      userBlock.style.background='#fafafa'; userBlock.style.borderRadius='10px'; userBlock.style.padding='10px';
+      userBlock.style.boxShadow='0 6px 18px rgba(0,0,0,0.06)';
+      userBlock.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><div><strong>${user.fullName||'No name'}</strong><br><small class="text-muted">${user.email||''}</small></div><div></div></div>`;
+
+      const photosGrid = document.createElement('div');
+      photosGrid.style.display='grid'; photosGrid.style.gridTemplateColumns='repeat(auto-fill,minmax(120px,1fr))'; photosGrid.style.gap='8px';
+
+      (user.photos||[]).forEach((p, idx) => {
+        const cell = document.createElement('div');
+        cell.style.position='relative'; cell.style.overflow='hidden'; cell.style.borderRadius='8px';
+        const img = document.createElement('img'); img.src = p.url || p; img.style.width='100%'; img.style.height='120px'; img.style.objectFit='cover';
+        const del = document.createElement('button'); del.textContent='Delete'; del.className='btn-secondary'; del.style.position='absolute'; del.style.top='8px'; del.style.right='8px'; del.style.padding='6px 8px'; del.onclick = () => {
+          if (!confirm('Delete this photo?')) return;
+          // currently backend supports deleting all photos for a user; warn and call that
+          if (!token) { alert('Admin token missing'); return; }
+          // Find user's id then call DELETE /api/admin/photos/:userId
+          fetch(`${BACKEND_URL}/api/admin/users`, { headers: { Authorization: `Bearer ${token}` } })
+            .then(r => r.json())
+            .then(d => {
+              const found = (d.users||[]).find(u => (u.email||'').toLowerCase() === (user.email||'').toLowerCase());
+              if (!found) throw new Error('User not found');
+              return fetch(`${BACKEND_URL}/api/admin/photos/${found._id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+            })
+            .then(r => r.json())
+            .then(res => {
+              if (res.success) {
+                addAdminLog('DELETE_PHOTOS', `Deleted photos for ${user.email}`);
+                // refresh modal
+                closeAdminPhotosModal();
+                adminViewPhotos();
+              } else {
+                alert(res.error || 'Failed to delete photos');
+              }
+            })
+            .catch(err => { console.error(err); alert('Error deleting photos'); });
+        };
+
+        cell.appendChild(img);
+        cell.appendChild(del);
+        photosGrid.appendChild(cell);
+      });
+
+      userBlock.appendChild(photosGrid);
+      grid.appendChild(userBlock);
     });
+
     inner.appendChild(grid);
-  }
-  modal.appendChild(inner);
-  document.body.appendChild(modal);
+    modal.appendChild(inner);
+    document.body.appendChild(modal);
+  }).catch(err => {
+    console.error('Error loading admin photos', err);
+    inner.innerHTML += '<p class="text-muted">Unable to load photos</p>';
+    modal.appendChild(inner);
+    document.body.appendChild(modal);
+  });
 }
 
 function closeAdminPhotosModal(){
@@ -396,12 +502,12 @@ function adminDeletePhoto(email,index){
 function renderAgeGate() {
     app.innerHTML = `
     <div class="auth-container">
-      <div class="card" style="text-align:center;padding:40px;">
-        <h2 style="color:#667eea;margin-bottom:20px;">❌ Age Verification Required</h2>
-        <p style="font-size:1.1em;color:#666;margin-bottom:30px;">
+      <div class="card text-center p-40">
+        <h2 class="text-primary mb-20">❌ Age Verification Required</h2>
+        <p class="mb-30 text-muted">
           We're sorry, but you must be at least 18 years old to use Heart Dating.
         </p>
-        <p style="color:#999;margin-bottom:30px;font-size:0.95em;">
+        <p class="text-muted mb-30">
           This is to protect our community and comply with legal requirements.
         </p>
         <button class="btn-secondary" onclick="renderHome()" style="width:100%;">
@@ -485,21 +591,21 @@ function signup() {
 
 function renderEmailVerification(email) {
     app.innerHTML = `
-    <div class="card" style="text-align:center;padding:30px;">
-      <h3 style="color:#667eea;margin-top:0;">✉️ Verify Your Email</h3>
-      <p style="color:#666;margin:15px 0;font-size:1.05em;">
+    <div class="card text-center p-30">
+      <h3 class="text-primary mb-0">✉️ Verify Your Email</h3>
+      <p class="text-muted mb-15 fs-1-05">
         A verification code has been sent to:<br>
-        <strong style="color:#667eea;">${email}</strong>
+        <strong class="text-primary">${email}</strong>
       </p>
-      <div style="background:#f5f5f5;padding:15px;border-radius:8px;margin:20px 0;border-left:4px solid #667eea;text-align:left;">
-        <p style="margin:0;color:#666;font-size:0.95em;"><strong>Check your email:</strong></p>
-        <p style="margin:8px 0 0 0;color:#999;font-size:0.9em;">Look for an email from Heart Dating App and enter the 6-digit code below</p>
+      <div class="info-box p-15">
+        <p class="mb-0 text-muted fs-0-95"><strong>Check your email:</strong></p>
+        <p class="text-muted mb-0" style="font-size:0.9em;">Look for an email from Heart Dating App and enter the 6-digit code below</p>
       </div>
-      <input id="verificationCode" type="text" placeholder="Enter 6-digit code" maxlength="6" style="text-align:center;letter-spacing:8px;font-size:1.5em;">
-      <button class="btn-primary" style="width:100%;" onclick="verifyEmail()">>
+      <input id="verificationCode" type="text" placeholder="Enter 6-digit code" maxlength="6" class="text-center" style="letter-spacing:8px;font-size:1.5em;">
+      <button class="btn-primary w-100" onclick="verifyEmail()">
         <i class="fas fa-check"></i> Verify
       </button>
-      <button class="btn-secondary" style="width:100%;margin-top:10px;" onclick="renderHome()">← Back Home</button>
+      <button class="btn-secondary w-100 mt-10" onclick="renderHome()">← Back Home</button>
     </div>
   `;
 }
